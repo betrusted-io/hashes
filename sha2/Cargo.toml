@@ -18,6 +18,27 @@ categories = ["cryptography", "no-std"]
 digest = "0.10.7"
 cfg-if = "1.0"
 
+# xous-specific dependencies
+xous = { version = "0.9.57", optional = true }
+log-server = { package = "xous-api-log", version = "0.1.53", optional = true }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.53", optional = true }
+xous-names = { package = "xous-api-names", version = "0.9.55", optional = true }
+log = { version = "0.4.14", optional = true }
+susres = { package = "xous-api-susres", version = "0.9.53", optional = true }
+
+xous-ipc = { version = "0.9.57", optional = true }
+num-derive = { version = "0.3.3", default-features = false, optional = true }
+num-traits = { version = "0.2.14", default-features = false, optional = true }
+rkyv = { version = "0.4.3", default-features = false, features = [
+    "const_generics",
+], optional = true }
+utralib = { version = "0.1.24", optional = true, default-features = false, features = [
+    "precursor-pvt",
+] }
+rand = { version = "0.8.5", optional = true }
+crypto-common = { version = "0.1.6", optional = true }
+
+
 [target.'cfg(any(target_arch = "aarch64", target_arch = "x86_64", target_arch = "x86"))'.dependencies]
 cpufeatures = "0.2"
 sha2-asm = { version = "0.6.1", optional = true }
@@ -27,15 +48,31 @@ digest = { version = "0.10.7", features = ["dev"] }
 hex-literal = "0.2.2"
 
 [features]
+precursor = [
+    "xous",
+    "log",
+    "log-server",
+    "xous-names",
+    "susres",
+    "xous-ipc",
+    "num-derive",
+    "num-traits",
+    "rkyv",
+    "utralib",
+    "rand",
+    "crypto-common",
+]
 default = ["std"]
 std = ["digest/std"]
 oid = ["digest/oid"] # Enable OID support. WARNING: Bumps MSRV to 1.57
-asm = ["sha2-asm"] # WARNING: this feature SHOULD NOT be enabled by library crates
+asm = [
+    "sha2-asm",
+] # WARNING: this feature SHOULD NOT be enabled by library crates
 # Use assembly backend for LoongArch64 targets
 # WARNING: Bumps MSRV to 1.72. This feature SHOULD NOT be enabled by library crates
 loongarch64_asm = []
-compress = [] # Expose compress functions
-force-soft = [] # Force software implementation
+compress = []         # Expose compress functions
+force-soft = []       # Force software implementation
 asm-aarch64 = ["asm"] # DEPRECATED: use `asm` instead
 
 [package.metadata.docs.rs]
