@@ -68,12 +68,19 @@ mod core_api;
 mod sha256;
 mod sha512;
 
+#[cfg(feature = "precursor")]
+mod api;
+#[cfg(feature = "precursor")]
+pub use api::*;
+
 #[cfg(feature = "compress")]
 pub use sha256::compress256;
 #[cfg(feature = "compress")]
 pub use sha512::compress512;
 
 pub use core_api::{Sha256VarCore, Sha512VarCore};
+#[cfg(feature = "precursor")]
+pub use sha512::Sha512VarCoreHw;
 
 impl_oid_carrier!(OidSha256, "2.16.840.1.101.3.4.2.1");
 impl_oid_carrier!(OidSha384, "2.16.840.1.101.3.4.2.2");
@@ -89,8 +96,18 @@ pub type Sha256 = CoreWrapper<CtVariableCoreWrapper<Sha256VarCore, U32, OidSha25
 /// SHA-512/224 hasher.
 pub type Sha512_224 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U28, OidSha512_224>>;
 /// SHA-512/256 hasher.
+#[cfg(not(feature = "precursor"))]
 pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
+#[cfg(feature = "precursor")]
+pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U32, OidSha512_256>>;
+#[cfg(feature = "precursor")]
+pub type Sha512_256Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
 /// SHA-384 hasher.
 pub type Sha384 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U48, OidSha384>>;
 /// SHA-512 hasher.
+#[cfg(not(feature = "precursor"))]
 pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
+#[cfg(feature = "precursor")]
+pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U64, OidSha512>>;
+#[cfg(feature = "precursor")]
+pub type Sha512Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
