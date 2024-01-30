@@ -22,6 +22,11 @@ cfg_if::cfg_if! {
     } else if #[cfg(all(feature = "loongarch64_asm", target_arch = "loongarch64"))] {
         mod loongarch64_asm;
         use loongarch64_asm::compress;
+    } else if #[cfg(feature = "precursor")] {
+        mod soft;
+        use soft::compress;
+        mod precursor;
+        pub use precursor::Sha512VarCoreHw;
     } else {
         mod soft;
         use soft::compress;
