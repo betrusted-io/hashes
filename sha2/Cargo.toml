@@ -32,9 +32,7 @@ num-traits = { version = "0.2.14", default-features = false, optional = true }
 rkyv = { version = "0.4.3", default-features = false, features = [
     "const_generics",
 ], optional = true }
-utralib = { version = "0.1.24", optional = true, default-features = false, features = [
-    "precursor-pvt",
-] }
+utralib = { version = "0.1.24", optional = true, default-features = false }
 rand = { version = "0.8.5", optional = true }
 crypto-common = { version = "0.1.6", optional = true }
 
@@ -58,7 +56,35 @@ precursor = [
     "num-derive",
     "num-traits",
     "rkyv",
-    "utralib",
+    "utralib/precursor",
+    "rand",
+    "crypto-common",
+]
+hosted = [
+    "xous",
+    "log",
+    "log-server",
+    "xous-names",
+    "susres",
+    "xous-ipc",
+    "num-derive",
+    "num-traits",
+    "rkyv",
+    "utralib/hosted",
+    "rand",
+    "crypto-common",
+]
+renode = [
+    "xous",
+    "log",
+    "log-server",
+    "xous-names",
+    "susres",
+    "xous-ipc",
+    "num-derive",
+    "num-traits",
+    "rkyv",
+    "renode/hosted",
     "rand",
     "crypto-common",
 ]
