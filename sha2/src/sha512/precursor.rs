@@ -64,7 +64,6 @@ macro_rules! new_template {
                     state,
                     block_len,
                     use_soft,
-                    config,
                     strategy: $strategy_spec,
                     in_progress: false,
                     length: 0,
@@ -198,8 +197,6 @@ pub struct Sha512VarCoreInner {
     use_soft: bool,
     /// specifies the strategy for fallback in case multiple hashes are initiated simultaneously
     strategy: FallbackStrategy,
-    /// specifies the hash type
-    config: Option<Sha2Config>,
     /// track if a hash is in progress
     in_progress: bool,
     /// track the length of the message processed so far
@@ -209,6 +206,7 @@ pub struct Sha512VarCoreInner {
 }
 
 impl Sha512VarCoreInner {
+    /// Inner implementation of the required trait method for `UpdateCore`
     pub fn update_blocks<T: digest::core_api::BlockSizeUser<BlockSize = U128>>(
         &mut self,
         blocks: &[Block<T>],
@@ -240,12 +238,13 @@ impl Sha512VarCoreInner {
                         .copy_from_slice(block.as_slice());
                 }
                 let buf = XousBuffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
-                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
+                buf.lend(ensure_conn(), Opcode::Update.to_u32().unwrap())
                     .expect("hardware rejected our hash chunk!");
             }
         }
     }
 
+    /// Inner implementation of the required trait method for `VariableOutputCore`
     pub fn finalize_variable_core<T: UpdateCore + OutputSizeUser + BufferKindUser + Sized>(
         &mut self,
         buffer: &mut Buffer<Sha512VarCoreHw>,
@@ -278,7 +277,7 @@ impl Sha512VarCoreInner {
             update.len = buffer.get_pos() as u16;
             update.buffer[..buffer.get_pos()].copy_from_slice(buffer.get_data());
             let buf = XousBuffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
-            buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
+            buf.lend(ensure_conn(), Opcode::Update.to_u32().unwrap())
                 .expect("hardware rejected our hash chunk!");
 
             let result = Sha2Finalize {
@@ -292,7 +291,7 @@ impl Sha512VarCoreInner {
             };
             let mut buf =
                 XousBuffer::into_buf(result).expect("couldn't map memory for the return buffer");
-            buf.lend_mut(self.ensure_conn(), Opcode::Finalize.to_u32().unwrap())
+            buf.lend_mut(ensure_conn(), Opcode::Finalize.to_u32().unwrap())
                 .expect("couldn't finalize");
 
             let returned: Sha2Finalize = buf.to_original().expect("couldn't decode return buffer");
@@ -340,78 +339,16 @@ impl Sha512VarCoreInner {
 
     /// This function exists, but is unfortunately inaccessible because it is buried within trait
     /// wrappers that hide it.
+    #[allow(dead_code)]
     pub fn set_fallback_strategy(&mut self, strat: FallbackStrategy) {
         self.strategy = strat;
     }
-
-    pub(crate) fn ensure_conn(&self) -> u32 {
-        if HW_CONN.load(Ordering::Relaxed) == 0 {
-            let xns = xous_names::XousNames::new().unwrap();
-            HW_CONN.store(
-                xns.request_connection_blocking(crate::api::SERVER_NAME_SHA512)
-                    .expect("Can't connect to Sha512 server"),
-                Ordering::Relaxed,
-            );
-            // split it this way to minimize number of round-trip calls to the trng.
-            let id1: u64 = rand::random();
-            let id2: u32 = rand::random();
-            TOKEN[0].store((id1 >> 32) as u32, Ordering::Relaxed);
-            TOKEN[1].store(id1 as u32, Ordering::Relaxed);
-            TOKEN[2].store(id2, Ordering::Relaxed);
-        }
-        HW_CONN.load(Ordering::Relaxed)
-    }
-    pub fn is_idle(&self) -> Result<bool, xous::Error> {
-        let response = send_message(
-            self.ensure_conn(),
-            Message::new_blocking_scalar(Opcode::IsIdle.to_usize().unwrap(), 0, 0, 0, 0),
-        )
-        .expect("Couldn't make IsIdle query");
-        if let xous::Result::Scalar1(result) = response {
-            if result != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Err(xous::Error::InternalError)
-        }
-    }
-    pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
-        let response = send_message(
-            self.ensure_conn(),
-            Message::new_blocking_scalar(
-                Opcode::AcquireSuspendLock.to_usize().unwrap(),
-                0,
-                0,
-                0,
-                0,
-            ),
-        )
-        .expect("Couldn't issue AcquireSuspendLock message");
-        if let xous::Result::Scalar1(result) = response {
-            if result != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
-        } else {
-            Err(xous::Error::InternalError)
-        }
-    }
-    pub fn abort_suspend(&self) -> Result<(), xous::Error> {
-        // we ignore the result and just turn it into () once we get anything back, as abort_suspend
-        // "can't fail"
-        send_message(
-            self.ensure_conn(),
-            Message::new_blocking_scalar(Opcode::AbortSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
-        )
-        .map(|_| ())
-    }
+    /// This routine executes the hash acquisition strategy (software only, try for hardware first
+    /// then fallback to software, or wait for hardware to become ready).
     pub fn try_acquire_hw(&mut self, config: Sha2Config) {
         if !self.in_progress && self.strategy != FallbackStrategy::SoftwareOnly {
             loop {
-                let conn = self.ensure_conn(); // also ensures the ID
+                let conn = ensure_conn(); // also ensures the ID
                 let response = send_message(
                     conn,
                     Message::new_blocking_scalar(
@@ -448,9 +385,10 @@ impl Sha512VarCoreInner {
             self.in_progress = true;
         }
     }
+    /// Reset the hardware hashing engine state, along with all local state.
     pub(crate) fn reset_hw(&mut self) {
         send_message(
-            self.ensure_conn(),
+            ensure_conn(),
             Message::new_blocking_scalar(
                 Opcode::Reset.to_usize().unwrap(),
                 TOKEN[0].load(Ordering::Relaxed) as usize,
@@ -464,5 +402,94 @@ impl Sha512VarCoreInner {
         self.length = 0;
         self.in_progress = false;
         self.use_soft = true;
+    }
+}
+
+/// This helper function ensures that we have a connection to the hash engine.
+/// Note that because of its integration into the `hash` external crate, we can't
+/// guarantee a clean, atomic `Drop` of the connection and so the allocated connection
+/// persists for the life of the program.
+pub(crate) fn ensure_conn() -> u32 {
+    if HW_CONN.load(Ordering::Relaxed) == 0 {
+        let xns = xous_names::XousNames::new().unwrap();
+        HW_CONN.store(
+            xns.request_connection_blocking(crate::api::SERVER_NAME_SHA512)
+                .expect("Can't connect to Sha512 server"),
+            Ordering::Relaxed,
+        );
+        // split it this way to minimize number of round-trip calls to the trng.
+        let id1: u64 = rand::random();
+        let id2: u32 = rand::random();
+        TOKEN[0].store((id1 >> 32) as u32, Ordering::Relaxed);
+        TOKEN[1].store(id1 as u32, Ordering::Relaxed);
+        TOKEN[2].store(id2, Ordering::Relaxed);
+    }
+    HW_CONN.load(Ordering::Relaxed)
+}
+
+#[allow(dead_code)]
+/// This is a structure used to reach into the control server and modify global attributes:
+/// for example, one can call `acquire_suspend_lock`, which will prevent the device from suspending
+/// until it is released. This is useful in the case that a long hash is running, and there is a risk
+/// that the user will suspend the device in the middle of it, which would cause all hash state
+/// to be lost.
+pub struct ShaControl {}
+
+#[allow(dead_code)]
+impl ShaControl {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+    /// Check if the hardware hash engine is currently idle
+    pub fn is_idle(&self) -> Result<bool, xous::Error> {
+        let response = send_message(
+            ensure_conn(),
+            Message::new_blocking_scalar(Opcode::IsIdle.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .expect("Couldn't make IsIdle query");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    /// Acquire a suspend lock. This can be called by a process to prevent new hardware hashes from starting,
+    /// clearing the way for the machine to safely go into suspend (as hardware hash state is lost on suspend).
+    pub fn acquire_suspend_lock(&self) -> Result<bool, xous::Error> {
+        let response = send_message(
+            ensure_conn(),
+            Message::new_blocking_scalar(
+                Opcode::AcquireSuspendLock.to_usize().unwrap(),
+                0,
+                0,
+                0,
+                0,
+            ),
+        )
+        .expect("Couldn't issue AcquireSuspendLock message");
+        if let xous::Result::Scalar1(result) = response {
+            if result != 0 {
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        } else {
+            Err(xous::Error::InternalError)
+        }
+    }
+    /// Clears the suspend lock. This will allow hashes to proceed. The suspend lock is also
+    /// automatically cleared on resume.
+    pub fn release_suspend_lock(&self) -> Result<(), xous::Error> {
+        // we ignore the result and just turn it into () once we get anything back, as abort_suspend
+        // "can't fail"
+        send_message(
+            ensure_conn(),
+            Message::new_blocking_scalar(Opcode::AbortSuspendLock.to_usize().unwrap(), 0, 0, 0, 0),
+        )
+        .map(|_| ())
     }
 }
