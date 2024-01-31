@@ -95,19 +95,23 @@ pub type Sha224 = CoreWrapper<CtVariableCoreWrapper<Sha256VarCore, U28, OidSha22
 pub type Sha256 = CoreWrapper<CtVariableCoreWrapper<Sha256VarCore, U32, OidSha256>>;
 /// SHA-512/224 hasher.
 pub type Sha512_224 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U28, OidSha512_224>>;
-/// SHA-512/256 hasher.
 #[cfg(not(feature = "precursor"))]
+/// SHA-512/256 hasher.
 pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
 #[cfg(feature = "precursor")]
+/// SHA-512/256 hasher, with "prefer hardware, fallback to software" semantics.
 pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U32, OidSha512_256>>;
 #[cfg(feature = "precursor")]
+/// SHA-512/256 hasher, with "software-only" semantics.
 pub type Sha512_256Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
 /// SHA-384 hasher.
 pub type Sha384 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U48, OidSha384>>;
-/// SHA-512 hasher.
 #[cfg(not(feature = "precursor"))]
+/// SHA-512 hasher.
 pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
 #[cfg(feature = "precursor")]
+/// SHA-512 hasher, with "prefer hardware, fallback to software" semantics.
 pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U64, OidSha512>>;
 #[cfg(feature = "precursor")]
+/// SHA-512 hasher, with "software-only" semantics.
 pub type Sha512Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
