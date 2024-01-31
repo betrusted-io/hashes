@@ -98,6 +98,12 @@ pub type Sha512_224 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U28, OidS
 #[cfg(not(any(feature = "precursor", feature = "renode")))]
 /// SHA-512/256 hasher.
 pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
+#[cfg(not(any(feature = "precursor", feature = "renode")))]
+/// SHA-512/256 hasher.
+pub type Sha512_256Hw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
+#[cfg(not(any(feature = "precursor", feature = "renode")))]
+/// SHA-512/256 hasher.
+pub type Sha512_256Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U32, OidSha512_256>>;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 /// SHA-512/256 hasher, with "prefer hardware, fallback to software" semantics.
 pub type Sha512_256 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U32, OidSha512_256>>;
@@ -112,6 +118,12 @@ pub type Sha384 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U48, OidSha38
 #[cfg(not(any(feature = "precursor", feature = "renode")))]
 /// SHA-512 hasher.
 pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
+#[cfg(not(any(feature = "precursor", feature = "renode")))]
+/// SHA-512 hasher.
+pub type Sha512Sw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
+#[cfg(not(any(feature = "precursor", feature = "renode")))]
+/// SHA-512 hasher.
+pub type Sha512Hw = CoreWrapper<CtVariableCoreWrapper<Sha512VarCore, U64, OidSha512>>;
 #[cfg(any(feature = "precursor", feature = "renode"))]
 /// SHA-512 hasher, with "prefer hardware, fallback to software" semantics.
 pub type Sha512 = CoreWrapper<CtVariableCoreWrapper<Sha512VarCoreHw, U64, OidSha512>>;
