@@ -1,9 +1,8 @@
 //! SHA-512
 use crate::api::*;
 use crate::{consts, sha512::compress512};
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use core::{fmt, slice::from_ref};
-use digest::core_api::CoreWrapper;
 use digest::Reset;
 use digest::{
     block_buffer::Eager,
@@ -68,11 +67,10 @@ impl UpdateCore for Sha512VarCoreHw {
             self.block_len += blocks.len() as u128;
             compress512(&mut self.state, blocks);
         } else {
-            for (index, chunk) in blocks
+            for chunk in blocks
                 .as_ref()
-                .chunks(3968 / self.output_size)
+                .chunks(3968 / Sha512VarCoreHw::block_size())
                 .into_iter()
-                .enumerate()
             {
                 // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap
                 // handling
@@ -85,10 +83,10 @@ impl UpdateCore for Sha512VarCoreHw {
                     buffer: [0; 3968],
                     len: 0,
                 };
-                for block in chunk.iter() {
+                for (block_index, block) in chunk.iter().enumerate() {
                     self.length += (block.len() as u64) * 8; // we need to keep track of length in bits
                     update.len += block.len() as u16;
-                    update.buffer[(index * block.len())..(index + 1) * block.len()]
+                    update.buffer[(block_index * block.len())..(block_index + 1) * block.len()]
                         .copy_from_slice(block.as_slice());
                 }
                 let buf = XousBuffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
@@ -165,26 +163,22 @@ impl VariableOutputCore for Sha512VarCoreHw {
                 chunk.copy_from_slice(&v.to_be_bytes());
             }
         } else {
-            buffer.len128_padding_be(bit_len, |b| {
-                // send the last chunk to the Sha2 HW engine
-                let mut update = Sha2Update {
-                    id: [
-                        TOKEN[0].load(Ordering::Relaxed),
-                        TOKEN[1].load(Ordering::Relaxed),
-                        TOKEN[2].load(Ordering::Relaxed),
-                    ],
-                    buffer: [0; 3968],
-                    len: 0,
-                };
-                self.length += (b.len() as u64) * 8; // we need to keep track of length in bits
-                for (&src, dest) in b.iter().zip(&mut update.buffer) {
-                    *dest = src;
-                }
-                update.len = b.len() as u16;
-                let buf = XousBuffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
-                buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
-                    .expect("hardware rejected our hash chunk!");
-            });
+            // send the last chunk to the Sha2 HW engine. Padding is handled in hardware.
+            let mut update = Sha2Update {
+                id: [
+                    TOKEN[0].load(Ordering::Relaxed),
+                    TOKEN[1].load(Ordering::Relaxed),
+                    TOKEN[2].load(Ordering::Relaxed),
+                ],
+                buffer: [0; 3968],
+                len: 0,
+            };
+            self.length += buffer.get_pos() as u64 * 8; // we need to keep track of length in bits
+            update.len = buffer.get_pos() as u16;
+            update.buffer[..buffer.get_pos()].copy_from_slice(buffer.get_data());
+            let buf = XousBuffer::into_buf(update).expect("couldn't map chunk into IPC buffer");
+            buf.lend(self.ensure_conn(), Opcode::Update.to_u32().unwrap())
+                .expect("hardware rejected our hash chunk!");
 
             let result = Sha2Finalize {
                 id: [
@@ -246,11 +240,6 @@ impl VariableOutputCore for Sha512VarCoreHw {
 
 impl Reset for Sha512VarCoreHw {
     fn reset(&mut self) {
-        self.reset_hw();
-    }
-}
-impl Drop for Sha512VarCoreHw {
-    fn drop(&mut self) {
         self.reset_hw();
     }
 }
