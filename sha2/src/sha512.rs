@@ -26,7 +26,7 @@ cfg_if::cfg_if! {
         mod soft;
         use soft::compress;
         mod precursor;
-        pub use precursor::Sha512VarCoreHw;
+        pub use precursor::{Sha512VarCoreHw, Sha512VarCoreHwOnly};
     } else {
         mod soft;
         use soft::compress;
