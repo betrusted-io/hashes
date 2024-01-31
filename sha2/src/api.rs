@@ -1,16 +1,11 @@
 #[allow(dead_code)]
-pub(crate) const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_"; // not used in hosted config
+/// The globally searchable name for the SHA-512 accelerator engine server
+pub const SERVER_NAME_SHA512: &str = "_Sha512 hardware accelerator server_"; // not used in hosted config
 
-#[allow(dead_code)]
-#[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-pub enum Sha2Result {
-    Sha512Result([u8; 64]),
-    Sha512Trunc256Result([u8; 32]),
-    SuspendError,
-    Uninitialized,
-    IdMismatch,
-}
+mod rkyv_enum;
+pub use rkyv_enum::*;
 
+/// Command requesting the hardware engine to pad and finalize a hash
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Sha2Finalize {
     pub id: [u32; 3],
@@ -18,12 +13,15 @@ pub(crate) struct Sha2Finalize {
     pub length_in_bits: Option<u64>,
 }
 
+/// Define the valid configuration for the hardware engine
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug, Copy, Clone)]
 pub(crate) enum Sha2Config {
     Sha512,
     Sha512Trunc256,
 }
 
+/// Buffer for holding data being sent to the hash engine. It is sized to maximize the utilization
+/// of a single page of memory.
 #[derive(Debug, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
 pub(crate) struct Sha2Update {
     pub id: [u32; 3], // our unique identifier so the server knows who the request is coming from
@@ -32,6 +30,7 @@ pub(crate) struct Sha2Update {
     pub len: u16, // length of just this buffer, fits in 16 bits
 }
 
+/// Action opcodes for the main server.
 #[allow(dead_code)]
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum Opcode {
@@ -45,7 +44,7 @@ pub(crate) enum Opcode {
     AcquireExclusive,
 
     /// Used by higher level coordination processes to acquire a lock on the hardware unit
-    /// to prevent any new transactions from occuring. The lock is automatically cleared on
+    /// to prevent any new transactions from occurring. The lock is automatically cleared on
     /// a resume, or by an explicit release
     AcquireSuspendLock,
     /// this is to be used if we decided in the end we aren't going to suspend.
@@ -72,6 +71,7 @@ pub(crate) enum Opcode {
     IrqEvent,
 }
 
+/// Suspend/resume operations, as utilized by the internal suspend/resume manager thread
 #[derive(num_derive::FromPrimitive, num_derive::ToPrimitive, Debug)]
 pub(crate) enum SusResOps {
     /// Suspend/resume callback
@@ -80,11 +80,16 @@ pub(crate) enum SusResOps {
     Quit,
 }
 
+/// Define the valid fallback strategies
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(usize)]
 pub enum FallbackStrategy {
+    /// Use hardware engine if it is immediately available, otherwise, fall back to a software implementation
     HardwareThenSoftware = 0,
+    /// Use only a server-local software implementation. More performant on small hashes (less than a few hundred bytes).
     SoftwareOnly = 1,
+    /// Wait for hardware to become ready. Can potentially deadlock, but useful for situations where a software
+    /// hash would simply be unacceptably long (for example, doing hash verification of the entire kernel disk image)
     WaitForHardware = 2,
 }
 impl From<usize> for FallbackStrategy {
