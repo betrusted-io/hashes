@@ -3,6 +3,7 @@ use crate::api::*;
 use crate::{consts, sha512::compress512};
 use core::sync::atomic::{AtomicU32, Ordering};
 use core::{fmt, slice::from_ref};
+use crypto_common::typenum::{IsLess, Le, NonZero, U256};
 use digest::Reset;
 use digest::{
     block_buffer::Eager,
@@ -26,13 +27,170 @@ static HW_CONN: AtomicU32 = AtomicU32::new(0);
 /// a unique-enough random ID number to prove we own our connection to the hashing engine hardware
 static TOKEN: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
 
+/// A macro for the new function for each specific sub-type that allows us to plug in
+/// the hardware rollback strategy without repeating a ton of code.
+macro_rules! new_template {
+    ($strategy_spec:expr) => {
+        fn new(output_size: usize) -> Result<Self, InvalidOutputSize> {
+            let state;
+            let use_soft;
+            let config;
+            match output_size {
+                28 => {
+                    state = consts::H512_224;
+                    use_soft = true;
+                    config = None;
+                }
+                32 => {
+                    state = consts::H512_256;
+                    use_soft = false;
+                    config = Some(Sha2Config::Sha512Trunc256);
+                }
+                48 => {
+                    state = consts::H512_384;
+                    use_soft = true;
+                    config = None;
+                }
+                64 => {
+                    state = consts::H512_512;
+                    use_soft = false;
+                    config = Some(Sha2Config::Sha512);
+                }
+                _ => return Err(InvalidOutputSize),
+            }
+            let block_len = 0;
+            let mut core = Self {
+                inner: Sha512VarCoreInner {
+                    state,
+                    block_len,
+                    use_soft,
+                    config,
+                    strategy: $strategy_spec,
+                    in_progress: false,
+                    length: 0,
+                    output_size,
+                },
+            };
+            // try to acquire a lock on the hardware, if the algorithm even supports it.
+            // this can update use_soft if a lock already exists, and we have a software fallback strategy.
+            if let Some(c) = config {
+                core.inner.try_acquire_hw(c);
+            }
+            Ok(core)
+        }
+    };
+}
+
+/// Wrapper for the hardware-then-software fallback implementation
+#[derive(Clone)]
+pub struct Sha512VarCoreHw {
+    inner: Sha512VarCoreInner,
+}
+impl HashMarker for Sha512VarCoreHw {}
+
+impl BlockSizeUser for Sha512VarCoreHw {
+    type BlockSize = U128;
+}
+
+impl BufferKindUser for Sha512VarCoreHw {
+    type BufferKind = Eager;
+}
+
+impl OutputSizeUser for Sha512VarCoreHw {
+    type OutputSize = U64;
+}
+
+impl AlgorithmName for Sha512VarCoreHw {
+    #[inline]
+    fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha512")
+    }
+}
+
+impl fmt::Debug for Sha512VarCoreHw {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha512VarCoreHw { ... }")
+    }
+}
+impl Reset for Sha512VarCoreHw {
+    fn reset(&mut self) {
+        self.inner.reset_hw();
+    }
+}
+
+impl UpdateCore for Sha512VarCoreHw {
+    fn update_blocks(&mut self, blocks: &[Block<Self>]) {
+        self.inner.update_blocks::<Sha512VarCoreHw>(blocks);
+    }
+}
+
+impl VariableOutputCore for Sha512VarCoreHw {
+    const TRUNC_SIDE: TruncSide = TruncSide::Left;
+    fn finalize_variable_core(&mut self, buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
+        self.inner
+            .finalize_variable_core::<Sha512VarCoreHw>(buffer, out);
+    }
+    new_template!(FallbackStrategy::HardwareThenSoftware);
+}
+/// Wrapper for the "wait for hardware to be free" implementation
+#[derive(Clone)]
+pub struct Sha512VarCoreHwOnly {
+    inner: Sha512VarCoreInner,
+}
+impl HashMarker for Sha512VarCoreHwOnly {}
+
+impl BlockSizeUser for Sha512VarCoreHwOnly {
+    type BlockSize = U128;
+}
+
+impl BufferKindUser for Sha512VarCoreHwOnly {
+    type BufferKind = Eager;
+}
+
+impl OutputSizeUser for Sha512VarCoreHwOnly {
+    type OutputSize = U64;
+}
+
+impl AlgorithmName for Sha512VarCoreHwOnly {
+    #[inline]
+    fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha512")
+    }
+}
+
+impl fmt::Debug for Sha512VarCoreHwOnly {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Sha512VarCoreHwOnly { ... }")
+    }
+}
+impl Reset for Sha512VarCoreHwOnly {
+    fn reset(&mut self) {
+        self.inner.reset_hw();
+    }
+}
+impl UpdateCore for Sha512VarCoreHwOnly {
+    fn update_blocks(&mut self, blocks: &[Block<Self>]) {
+        self.inner.update_blocks::<Sha512VarCoreHwOnly>(blocks);
+    }
+}
+
+impl VariableOutputCore for Sha512VarCoreHwOnly {
+    const TRUNC_SIDE: TruncSide = TruncSide::Left;
+    fn finalize_variable_core(&mut self, buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
+        self.inner
+            .finalize_variable_core::<Sha512VarCoreHwOnly>(buffer, out);
+    }
+    new_template!(FallbackStrategy::WaitForHardware);
+}
 /// Core block-level SHA-512 hasher with variable output size, using a hardware accelerator.
 ///
 /// Supports initialization only for 32 and 64 byte output sizes,
 /// i.e. 256 and 512 bits respectively. Other sizes (224 and 384 bits) fall back to software
 /// emulation.
 #[derive(Clone)]
-pub struct Sha512VarCoreHw {
+pub struct Sha512VarCoreInner {
     /// software emulation state
     state: consts::State512,
     block_len: u128,
@@ -50,19 +208,11 @@ pub struct Sha512VarCoreHw {
     output_size: usize,
 }
 
-impl HashMarker for Sha512VarCoreHw {}
-
-impl BlockSizeUser for Sha512VarCoreHw {
-    type BlockSize = U128;
-}
-
-impl BufferKindUser for Sha512VarCoreHw {
-    type BufferKind = Eager;
-}
-
-impl UpdateCore for Sha512VarCoreHw {
-    #[inline]
-    fn update_blocks(&mut self, blocks: &[Block<Self>]) {
+impl Sha512VarCoreInner {
+    pub fn update_blocks<T: digest::core_api::BlockSizeUser<BlockSize = U128>>(
+        &mut self,
+        blocks: &[Block<T>],
+    ) {
         if self.use_soft {
             self.block_len += blocks.len() as u128;
             compress512(&mut self.state, blocks);
@@ -95,65 +245,16 @@ impl UpdateCore for Sha512VarCoreHw {
             }
         }
     }
-}
 
-impl OutputSizeUser for Sha512VarCoreHw {
-    type OutputSize = U64;
-}
-
-impl VariableOutputCore for Sha512VarCoreHw {
-    const TRUNC_SIDE: TruncSide = TruncSide::Left;
-
-    #[inline]
-    fn new(output_size: usize) -> Result<Self, InvalidOutputSize> {
-        let state;
-        let use_soft;
-        let config;
-        match output_size {
-            28 => {
-                state = consts::H512_224;
-                use_soft = true;
-                config = None;
-            }
-            32 => {
-                state = consts::H512_256;
-                use_soft = false;
-                config = Some(Sha2Config::Sha512Trunc256);
-            }
-            48 => {
-                state = consts::H512_384;
-                use_soft = true;
-                config = None;
-            }
-            64 => {
-                state = consts::H512_512;
-                use_soft = false;
-                config = Some(Sha2Config::Sha512);
-            }
-            _ => return Err(InvalidOutputSize),
-        }
-        let block_len = 0;
-        let mut core = Self {
-            state,
-            block_len,
-            use_soft,
-            config,
-            strategy: FallbackStrategy::HardwareThenSoftware,
-            in_progress: false,
-            length: 0,
-            output_size,
-        };
-        // try to acquire a lock on the hardware, if the algorithm even supports it.
-        // this can update use_soft if a lock already exists, and we have a software fallback strategy.
-        if let Some(c) = config {
-            core.try_acquire_hw(c);
-        }
-        Ok(core)
-    }
-
-    #[inline]
-    fn finalize_variable_core(&mut self, buffer: &mut Buffer<Self>, out: &mut Output<Self>) {
-        let bs = Self::BlockSize::U64 as u128;
+    pub fn finalize_variable_core<T: UpdateCore + OutputSizeUser + BufferKindUser + Sized>(
+        &mut self,
+        buffer: &mut Buffer<Sha512VarCoreHw>,
+        out: &mut Output<T>,
+    ) where
+        T::BlockSize: IsLess<U256>,
+        Le<T::BlockSize, U256>: NonZero,
+    {
+        let bs = <Sha512VarCoreHw as BlockSizeUser>::BlockSize::U64 as u128;
         let bit_len = 8 * (buffer.get_pos() as u128 + bs * self.block_len);
 
         if self.use_soft {
@@ -236,15 +337,7 @@ impl VariableOutputCore for Sha512VarCoreHw {
         }
         self.reset_hw();
     }
-}
 
-impl Reset for Sha512VarCoreHw {
-    fn reset(&mut self) {
-        self.reset_hw();
-    }
-}
-
-impl Sha512VarCoreHw {
     /// This function exists, but is unfortunately inaccessible because it is buried within trait
     /// wrappers that hide it.
     pub fn set_fallback_strategy(&mut self, strat: FallbackStrategy) {
@@ -315,7 +408,7 @@ impl Sha512VarCoreHw {
         )
         .map(|_| ())
     }
-    pub(crate) fn try_acquire_hw(&mut self, config: Sha2Config) {
+    pub fn try_acquire_hw(&mut self, config: Sha2Config) {
         if !self.in_progress && self.strategy != FallbackStrategy::SoftwareOnly {
             loop {
                 let conn = self.ensure_conn(); // also ensures the ID
@@ -371,19 +464,5 @@ impl Sha512VarCoreHw {
         self.length = 0;
         self.in_progress = false;
         self.use_soft = true;
-    }
-}
-
-impl AlgorithmName for Sha512VarCoreHw {
-    #[inline]
-    fn write_alg_name(f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Sha512")
-    }
-}
-
-impl fmt::Debug for Sha512VarCoreHw {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Sha512VarCore { ... }")
     }
 }
