@@ -12,7 +12,7 @@ use num_traits::{FromPrimitive, ToPrimitive};
 use xous::msg_blocking_scalar_unpack;
 use xous_ipc::Buffer;
 
-#[cfg(any(feature = "precursor", feature = "renode"))]
+#[cfg(any(any(feature = "precursor", feature = "renode"), feature = "renode"))]
 mod implementation {
     #[cfg(feature = "event_wait")]
     use num_traits::*;

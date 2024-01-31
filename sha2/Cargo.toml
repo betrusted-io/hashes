@@ -84,7 +84,7 @@ renode = [
     "num-derive",
     "num-traits",
     "rkyv",
-    "renode/hosted",
+    "utralib/renode",
     "rand",
     "crypto-common",
 ]
