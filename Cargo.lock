@@ -545,18 +545,18 @@ dependencies = [
 
 [[package]]
 name = "xous"
-version = "0.9.57"
+version = "0.9.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "129436029fe61fe1008604175a280e0a607a7a74acf48ca08773c74aae22d743"
+checksum = "cb93122c9dab77f8bde501ff0677d3df7777982f9faa23603423aeb5eae4e55d"
 dependencies = [
  "lazy_static",
 ]
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.53"
+version = "0.1.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85d3565a3ff5a8228835a273a1d3e02f5fe88c3086711d96eec6ea2067ae2980"
+checksum = "941f7fd7c114e1e0c401bbbe8222e8adbb4bc8ebeb782f7812d8f1678a578934"
 dependencies = [
  "log",
  "num-derive",
@@ -567,9 +567,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.55"
+version = "0.9.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "371e870d9fca17643bae54cb4b8389bc53358b28973d835325575e0b9efaf8f8"
+checksum = "471502d9379d198738ec55dec7cd688ce21e1cfe7d93af6dad25e38c1c404d1c"
 dependencies = [
  "log",
  "num-derive",
@@ -582,9 +582,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.53"
+version = "0.9.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb84e28d54ff3bd7002ec9d0df3044839eee9bed659aa5589261462b5413ce7"
+checksum = "7554497b3b3c07bd70948f1b997dd5692643996972e13388798306ac26588b2c"
 dependencies = [
  "log",
  "num-derive",
@@ -598,9 +598,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.53"
+version = "0.9.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91dbb8419dd180fae08200c46cb2a8d9a14e1c1447f224ed901fff006823269"
+checksum = "d9e8bb005478553d38da42fcfe001d833d7ac4bb1065f6d88164547ac0e2294c"
 dependencies = [
  "log",
  "num-derive",
@@ -616,9 +616,9 @@ dependencies = [
 
 [[package]]
 name = "xous-ipc"
-version = "0.9.57"
+version = "0.9.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "934c882aaa65bd5e2d71b11842083972356aabae0259ef7c42043d59dcd53a67"
+checksum = "2f5081581314f115e2005403ee2cc0957d86cbfc49edf6e8b05d2fcf6c226c5d"
 dependencies = [
  "bitflags",
  "rkyv",

@@ -24,8 +24,6 @@ use xous_ipc::Buffer as XousBuffer;
 /// connector's side, not on the server's side; so when the connecting process that calls this
 /// library dies, this static data dies with it.
 static HW_CONN: AtomicU32 = AtomicU32::new(0);
-/// a unique-enough random ID number to prove we own our connection to the hashing engine hardware
-static TOKEN: [AtomicU32; 3] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
 
 /// A macro for the new function for each specific sub-type that allows us to plug in
 /// the hardware rollback strategy without repeating a ton of code.
@@ -59,15 +57,25 @@ macro_rules! new_template {
                 _ => return Err(InvalidOutputSize),
             }
             let block_len = 0;
+            let mut token = [0u32; 3];
+            // split it this way to minimize number of round-trip calls to the trng.
+            let id1: u64 = rand::random();
+            let id2: u32 = rand::random();
+            token[0] = (id1 >> 32) as u32;
+            token[1] = id1 as u32;
+            token[2] = id2;
             let mut core = Self {
                 inner: Sha512VarCoreInner {
                     state,
                     block_len,
                     use_soft,
+                    token,
                     strategy: $strategy_spec,
                     in_progress: false,
                     length: 0,
                     output_size,
+                    retry_acquire: true,
+                    config,
                 },
             };
             // try to acquire a lock on the hardware, if the algorithm even supports it.
@@ -193,7 +201,7 @@ pub struct Sha512VarCoreInner {
     /// software emulation state
     state: consts::State512,
     block_len: u128,
-    /// whether or not this current hasher instance will use software or hardware acceleration
+    /// whether or not this current hasher iteration will use software or hardware acceleration
     use_soft: bool,
     /// specifies the strategy for fallback in case multiple hashes are initiated simultaneously
     strategy: FallbackStrategy,
@@ -203,6 +211,13 @@ pub struct Sha512VarCoreInner {
     length: u64,
     /// output size
     output_size: usize,
+    /// a unique-enough hardware token to ensure exclusive access the hashing engine
+    token: [u32; 3],
+    /// track if we should retry a hardware acquire (this is necessary if a hash object
+    /// is re-used via `finalize()`)
+    retry_acquire: bool,
+    /// the configuration of the hasher, as specified at `new` time
+    config: Option<Sha2Config>,
 }
 
 impl Sha512VarCoreInner {
@@ -211,6 +226,11 @@ impl Sha512VarCoreInner {
         &mut self,
         blocks: &[Block<T>],
     ) {
+        if self.retry_acquire {
+            if let Some(c) = self.config {
+                self.try_acquire_hw(c);
+            }
+        }
         if self.use_soft {
             self.block_len += blocks.len() as u128;
             compress512(&mut self.state, blocks);
@@ -223,11 +243,7 @@ impl Sha512VarCoreInner {
                 // one SHA512 block (128 bytes) short of 4096 to give space for struct overhead in page remap
                 // handling
                 let mut update = Sha2Update {
-                    id: [
-                        TOKEN[0].load(Ordering::Relaxed),
-                        TOKEN[1].load(Ordering::Relaxed),
-                        TOKEN[2].load(Ordering::Relaxed),
-                    ],
+                    id: self.token,
                     buffer: [0; 3968],
                     len: 0,
                 };
@@ -253,6 +269,12 @@ impl Sha512VarCoreInner {
         T::BlockSize: IsLess<U256>,
         Le<T::BlockSize, U256>: NonZero,
     {
+        // it's possible finalize is called without update if the data is smaller than a blocksize!
+        if self.retry_acquire {
+            if let Some(c) = self.config {
+                self.try_acquire_hw(c);
+            }
+        }
         let bs = <Sha512VarCoreHw as BlockSizeUser>::BlockSize::U64 as u128;
         let bit_len = 8 * (buffer.get_pos() as u128 + bs * self.block_len);
 
@@ -265,11 +287,7 @@ impl Sha512VarCoreInner {
         } else {
             // send the last chunk to the Sha2 HW engine. Padding is handled in hardware.
             let mut update = Sha2Update {
-                id: [
-                    TOKEN[0].load(Ordering::Relaxed),
-                    TOKEN[1].load(Ordering::Relaxed),
-                    TOKEN[2].load(Ordering::Relaxed),
-                ],
+                id: self.token,
                 buffer: [0; 3968],
                 len: 0,
             };
@@ -281,11 +299,7 @@ impl Sha512VarCoreInner {
                 .expect("hardware rejected our hash chunk!");
 
             let result = Sha2Finalize {
-                id: [
-                    TOKEN[0].load(Ordering::Relaxed),
-                    TOKEN[1].load(Ordering::Relaxed),
-                    TOKEN[2].load(Ordering::Relaxed),
-                ],
+                id: self.token,
                 result: Sha2Result::Uninitialized,
                 length_in_bits: None,
             };
@@ -353,9 +367,9 @@ impl Sha512VarCoreInner {
                     conn,
                     Message::new_blocking_scalar(
                         Opcode::AcquireExclusive.to_usize().unwrap(),
-                        TOKEN[0].load(Ordering::Relaxed) as usize,
-                        TOKEN[1].load(Ordering::Relaxed) as usize,
-                        TOKEN[2].load(Ordering::Relaxed) as usize,
+                        self.token[0] as usize,
+                        self.token[1] as usize,
+                        self.token[2] as usize,
                         config.to_usize().unwrap(),
                     ),
                 )
@@ -384,6 +398,7 @@ impl Sha512VarCoreInner {
             self.use_soft = true;
             self.in_progress = true;
         }
+        self.retry_acquire = false; // we've tried; don't try again until we've finalized a hash
     }
     /// Reset the hardware hashing engine state, along with all local state.
     pub(crate) fn reset_hw(&mut self) {
@@ -391,9 +406,9 @@ impl Sha512VarCoreInner {
             ensure_conn(),
             Message::new_blocking_scalar(
                 Opcode::Reset.to_usize().unwrap(),
-                TOKEN[0].load(Ordering::Relaxed) as usize,
-                TOKEN[1].load(Ordering::Relaxed) as usize,
-                TOKEN[2].load(Ordering::Relaxed) as usize,
+                self.token[0] as usize,
+                self.token[1] as usize,
+                self.token[2] as usize,
                 0,
             ),
         )
@@ -402,6 +417,15 @@ impl Sha512VarCoreInner {
         self.length = 0;
         self.in_progress = false;
         self.use_soft = true;
+        self.retry_acquire = true;
+    }
+}
+
+impl Drop for Sha512VarCoreInner {
+    fn drop(&mut self) {
+        if self.in_progress && !self.use_soft {
+            self.reset_hw();
+        }
     }
 }
 
@@ -417,12 +441,6 @@ pub(crate) fn ensure_conn() -> u32 {
                 .expect("Can't connect to Sha512 server"),
             Ordering::Relaxed,
         );
-        // split it this way to minimize number of round-trip calls to the trng.
-        let id1: u64 = rand::random();
-        let id2: u32 = rand::random();
-        TOKEN[0].store((id1 >> 32) as u32, Ordering::Relaxed);
-        TOKEN[1].store(id1 as u32, Ordering::Relaxed);
-        TOKEN[2].store(id2, Ordering::Relaxed);
     }
     HW_CONN.load(Ordering::Relaxed)
 }
