@@ -441,7 +441,7 @@ fn main() -> ! {
                 match client_id {
                     Some(id) => {
                         if id == update.id {
-                            engine512.update(&update.buffer[..update.len as usize]);
+                            engine512.update(&update.buffer[..usize::from(update.len)]);
                         }
                     }
                     _ => {
