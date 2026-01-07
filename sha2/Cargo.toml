@@ -19,14 +19,14 @@ digest = "0.10.7"
 cfg-if = "1.0"
 
 # xous-specific dependencies
-xous = { version = "0.9.68", optional = true }
-log-server = { package = "xous-api-log", version = "0.1.67", optional = true }
-ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.67", optional = true }
-xous-names = { package = "xous-api-names", version = "0.9.69", optional = true }
+xous = { version = "0.9.69", optional = true }
+log-server = { package = "xous-api-log", version = "0.1.68", optional = true }
+ticktimer-server = { package = "xous-api-ticktimer", version = "0.9.68", optional = true }
+xous-names = { package = "xous-api-names", version = "0.9.70", optional = true }
 log = { version = "0.4.14", optional = true }
-susres = { package = "xous-api-susres", version = "0.9.67", optional = true }
+susres = { package = "xous-api-susres", version = "0.9.68", optional = true }
 
-xous-ipc = { version = "0.10.8", optional = true }
+xous-ipc = { version = "0.10.9", optional = true }
 num-derive = { version = "0.3.3", default-features = false, optional = true }
 num-traits = { version = "0.2.14", default-features = false, optional = true }
 rkyv = { version = "0.8.8", default-features = false, features = [
