@@ -649,18 +649,18 @@ dependencies = [
 
 [[package]]
 name = "xous"
-version = "0.9.67"
+version = "0.9.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb2954670da82bb4be335f2f576d48d33475145d9d0c83c725f395cf3284a12"
+checksum = "acaeff6cedd119aa86d1b06fef4e2935bc4b132468a38f3f006b5574018ba5e2"
 dependencies = [
  "lazy_static",
 ]
 
 [[package]]
 name = "xous-api-log"
-version = "0.1.66"
+version = "0.1.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "192e15fa639d4e88da58e000dd050c5dbf2fda043b01d02c27ae4333c5787b40"
+checksum = "7b0fd76c709e3863b50a51201107cefbf5665d70662d76dbf46c2260a94da446"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -671,9 +671,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-names"
-version = "0.9.68"
+version = "0.9.70"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4e4e39e3810953c7e6c05ad42fc92fced2c42ba83d2436cde5cf4dcfefc7fcf"
+checksum = "41f0870c3c8ed9f50435f9285f25d365e3ccddb310c8cf5ba31031eb134d95b3"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -686,14 +686,15 @@ dependencies = [
 
 [[package]]
 name = "xous-api-susres"
-version = "0.9.66"
+version = "0.9.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ddfc013eee2369efd105e67d23bd2749114a40c4c3164529e240e308d25168"
+checksum = "116c252eaaee82617af35497abaa479dc67e65e7d1c503fbb3b6507dfccc51b0"
 dependencies = [
  "log",
  "num-derive 0.4.2",
  "num-traits",
  "rkyv",
+ "utralib",
  "xous",
  "xous-api-log",
  "xous-api-names",
@@ -702,9 +703,9 @@ dependencies = [
 
 [[package]]
 name = "xous-api-ticktimer"
-version = "0.9.66"
+version = "0.9.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "970197189e2a5dbba243ff9bb43225dfeca76031497f15789597fbfe4aa7c9f6"
+checksum = "5b282a2b10e0bbd92c60fef8326f65e5576e7c7a33ea482f041167008d814045"
 dependencies = [
  "log",
  "num-derive 0.4.2",
@@ -720,9 +721,9 @@ dependencies = [
 
 [[package]]
 name = "xous-ipc"
-version = "0.10.7"
+version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd409e8f0837f6bb8d31b325cf2c4af7a046b0fb227088dfb7a4cbc2bcfbac88"
+checksum = "516e0d043d8c0bd3aaffb7260b86f30993701ff8f26d84579fdcd53968a5adf6"
 dependencies = [
  "bitflags",
  "rkyv",
