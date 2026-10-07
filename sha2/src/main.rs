@@ -354,7 +354,7 @@ fn susres_thread(sid0: usize, sid1: usize, sid2: usize, sid3: usize) {
         }
     }
     xns.unregister_server(susres_sid).unwrap();
-    xous::destroy_server(susres_sid).unwrap();
+    unsafe { xous::destroy_server(susres_sid).unwrap(); }
 }
 
 fn main() -> ! {
@@ -545,7 +545,8 @@ fn main() -> ! {
     }
 
     xns.unregister_server(engine512_sid).unwrap();
-    xous::destroy_server(engine512_sid).unwrap();
+    // safety: server must have no pending blocking messages or lent pages
+    unsafe { xous::destroy_server(engine512_sid).unwrap(); }
     log::trace!("quitting");
     xous::terminate_process(0)
 }
